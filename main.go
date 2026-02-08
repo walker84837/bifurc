@@ -5,9 +5,10 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"os/exec"
 	"strconv"
 	"strings"
+
+	git "diffstat/pkg"
 
 	"github.com/fatih/color"
 )
@@ -26,6 +27,17 @@ func init() {
 	flag.StringVar(&format, "format", "text", "Output format: text, json, custom")
 	flag.StringVar(&separator, "separator", "\n", "Separator for custom output format")
 	flag.BoolVar(&noColor, "no-color", false, "Disable color output")
+
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "diffstat - Compare Git branches and show statistics\n\n")
+		fmt.Fprintf(os.Stderr, "Usage: %s [options]\n\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Examples:\n")
+		fmt.Fprintf(os.Stderr, "  %s --branch1 main --branch2 feature-branch\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s --branch1 HEAD~1 --branch2 HEAD --format json\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s --branch1 develop --branch2 main --no-color\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "\nOptions:\n")
+		flag.PrintDefaults()
+	}
 }
 
 func main() {
@@ -35,6 +47,16 @@ func main() {
 		outputError("Both --branch1 and --branch2 are required")
 	}
 
+	gitClient := git.GetGitClient()
+
+	// Validate branches exist
+	if !gitClient.CheckBranch(branch1) {
+		outputError(fmt.Sprintf("Invalid branch1 '%s': branch does not exist", branch1))
+	}
+	if !gitClient.CheckBranch(branch2) {
+		outputError(fmt.Sprintf("Invalid branch2 '%s': branch does not exist", branch2))
+	}
+
 	// Configure color output
 	if format != "text" {
 		color.NoColor = true
@@ -42,14 +64,23 @@ func main() {
 		color.NoColor = noColor
 	}
 
-	totalLines, err := getTotalLines()
-	if err != nil {
-		outputError(fmt.Sprintf("Error calculating total lines: %v", err))
+	// Show repository info for text format
+	if format == "text" && !noColor {
+		if repoInfo, err := gitClient.GetRepoInfo(); err == nil {
+			fmt.Printf("Repository: %s\n", color.CyanString(repoInfo))
+			fmt.Println()
+		}
 	}
 
-	changedLines, err := getChangedLines(branch1, branch2)
+	showProgress := format == "text" && !noColor
+	totalLines, err := gitClient.GetTotalLinesWithProgress(showProgress)
 	if err != nil {
-		outputError(fmt.Sprintf("Error calculating changed lines: %v", err))
+		outputError(fmt.Sprintf("Failed to count total lines: %v\nMake sure you're in a Git repository and git is installed.", err))
+	}
+
+	changedLines, err := gitClient.GetChangedLines(branch1, branch2)
+	if err != nil {
+		outputError(fmt.Sprintf("Failed to compare branches '%s' and '%s': %v\nCheck if the branches exist and are accessible.", branch1, branch2, err))
 	}
 
 	if changedLines == 0 && format == "text" {
@@ -114,53 +145,4 @@ func outputError(message string) {
 		color.Red(message)
 	}
 	os.Exit(1)
-}
-
-func getTotalLines() (int, error) {
-	out, err := exec.Command("git", "ls-files").Output()
-	if err != nil {
-		return 0, err
-	}
-
-	files := strings.Split(strings.TrimSpace(string(out)), "\n")
-	totalLines := 0
-
-	for _, file := range files {
-		out, err := exec.Command("wc", "-l", file).Output()
-		if err != nil {
-			return 0, err
-		}
-		lines, err := strconv.Atoi(strings.Fields(string(out))[0])
-		if err != nil {
-			return 0, err
-		}
-		totalLines += lines
-	}
-
-	return totalLines, nil
-}
-
-func getChangedLines(branch1, branch2 string) (int, error) {
-	out, err := exec.Command("git", "diff", "--stat", branch1, branch2).Output()
-	if err != nil {
-		return 0, err
-	}
-
-	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	if len(lines) == 0 {
-		return 0, nil
-	}
-	lastLine := lines[len(lines)-1]
-
-	fields := strings.Fields(lastLine)
-	if len(fields) < 1 {
-		return 0, nil
-	}
-
-	changedLines, err := strconv.Atoi(fields[0])
-	if err != nil {
-		return 0, err
-	}
-
-	return changedLines, nil
 }
