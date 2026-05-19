@@ -86,7 +86,7 @@ diffstat calculates a **divergence score** between two Git branches using a form
 ### Formula
 
 $$
-D = \frac{\Delta L}{\operatorname{avg}(LOC_1, LOC_2)} \times W_t + \frac{\Delta B}{\operatorname{avg}(Bytes_1, Bytes_2)} \times W_b
+D = \frac{\Delta L}{\text{avg}(\text{LOC}_1, \text{LOC}_2)} \times W_t + \frac{\Delta B}{\text{avg}(\text{Bytes}_1, \text{Bytes}_2)} \times W_b
 $$
 
 $$
@@ -123,7 +123,7 @@ Presets set Wt and Wb to sensible defaults for different project types:
 When `--lambda` is 0 (default), λ is auto-calculated from the average branch line count:
 
 $$
-\lambda = \text{clamp}\!\left(0.5,\ \frac{4.0}{\log_{10}(\max(LOC, 10))},\ 2.0\right)
+\lambda = \text{clamp}\!\left(0.5,\ \frac{4.0}{\log_{10}(\max(\text{LOC}, 10))},\ 2.0\right)
 $$
 
 | LOC | λ |

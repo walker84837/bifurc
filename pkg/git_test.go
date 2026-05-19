@@ -23,6 +23,7 @@ func setupTestRepo(t *testing.T, c *GitClient) {
 	run("checkout", "-b", "main")
 	run("config", "user.email", "test@test.com")
 	run("config", "user.name", "Test")
+	run("config", "commit.gpgSign", "false")
 
 	writeFile(t, dir+"/a.txt", "line1\nline2\nline3\n")
 	writeFile(t, dir+"/b.txt", "line1\nline2\n")
