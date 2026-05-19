@@ -28,7 +28,7 @@ var (
 )
 
 type presetWeights struct {
-	wt, wb float64
+	weightText, weightBinary float64
 }
 
 var presets = map[string]presetWeights{
@@ -107,11 +107,15 @@ func main() {
 		pw = presets["custom"]
 	}
 
-	wt := pw.wt
-	wb := pw.wb
+	weightText := pw.weightText
+	weightBinary := pw.weightBinary
 	if preset == "custom" {
-		wt = textWeight
-		wb = binaryWeight
+		weightText = textWeight
+		weightBinary = binaryWeight
+	}
+
+	if math.Abs(weightText+weightBinary-1.0) > 1e-6 {
+		outputError(fmt.Sprintf("Weights must sum to 1.0, got weightText=%.2f, weightBinary=%.2f (sum=%.4f)", weightText, weightBinary, weightText+weightBinary))
 	}
 
 	deltaLines, binaryFiles, err := gitClient.GetTextDiff(branch1, branch2)
@@ -136,29 +140,25 @@ func main() {
 		outputError(err.Error())
 	}
 
-	baseL := totalLoc1
-	if totalLoc2 > totalLoc1 {
-		baseL = totalLoc2
-	}
-	totalBinBytes := totalBinBytes1
-	if totalBinBytes2 > totalBinBytes1 {
-		totalBinBytes = totalBinBytes2
-	}
+	avgLoc := (totalLoc1 + totalLoc2) / 2
+	avgBinBytes := (totalBinBytes1 + totalBinBytes2) / 2
 
-	lambda := resolveLambda(lambdaFlag, sensitivity, baseL)
-	D, divergence := calculateDivergence(deltaLines, deltaBinaryBytes, baseL, totalBinBytes, wt, wb, lambda)
+	lambda := resolveLambda(lambdaFlag, sensitivity, avgLoc)
+	_, _, divergence := calculateDivergence(deltaLines, deltaBinaryBytes, avgLoc, avgBinBytes, weightText, weightBinary)
 
 	switch format {
 	case "text":
-		outputText(gitClient, deltaLines, deltaBinaryBytes, totalLoc1, totalLoc2, totalBinBytes1, totalBinBytes2, baseL, totalBinBytes, D, divergence, lambda, wt, wb)
+		outputText(gitClient, deltaLines, deltaBinaryBytes, avgLoc, avgBinBytes, divergence, lambda)
 	case "json":
-		outputJSON(deltaLines, deltaBinaryBytes, baseL, totalBinBytes, D, divergence, lambda, wt, wb)
+		outputJSON(deltaLines, deltaBinaryBytes, avgLoc, avgBinBytes, divergence, lambda, weightText, weightBinary)
 	case "custom":
-		outputCustom(deltaLines, deltaBinaryBytes, baseL, totalBinBytes, D, divergence, lambda, wt, wb)
+		outputCustom(deltaLines, deltaBinaryBytes, avgLoc, avgBinBytes, divergence, lambda, weightText, weightBinary)
 	default:
 		outputError("Invalid output format specified")
 	}
 }
+
+const lambdaBase = 4.0
 
 func autoLambda(loc int) float64 {
 	if loc <= 0 {
@@ -168,7 +168,7 @@ func autoLambda(loc int) float64 {
 	if base < 1 {
 		base = 1
 	}
-	l := 4.0 / base
+	l := lambdaBase / base
 	return math.Max(0.5, math.Min(2.0, l))
 }
 
@@ -179,15 +179,19 @@ func resolveLambda(lambdaFlag float64, sensitivity string, baseL int) float64 {
 	return autoLambda(baseL) * sensitivityMult[sensitivity]
 }
 
-func calculateDivergence(deltaLines int, deltaBinaryBytes int64, baseL int, totalBinBytes int64, wt, wb, lambda float64) (D, divergence float64) {
-	if baseL > 0 {
-		D += (float64(deltaLines) / float64(baseL)) * wt
+func calculateDivergence(deltaLines int, deltaBinaryBytes int64, avgLoc int, avgBinBytes int64, weightText, weightBinary float64) (divergenceText, divergenceBinary, divergence float64) {
+	if avgLoc > 0 {
+		divergenceText = (float64(deltaLines) / float64(avgLoc)) * weightText
 	}
-	if totalBinBytes > 0 {
-		D += (float64(deltaBinaryBytes) / float64(totalBinBytes)) * wb
+	if avgBinBytes > 0 {
+		divergenceBinary = (float64(deltaBinaryBytes) / float64(avgBinBytes)) * weightBinary
 	}
-	divergence = 100.0 * (1.0 - math.Exp(-lambda*D))
-	return D, divergence
+	divergence = divergenceText + divergenceBinary
+	return
+}
+
+func divergenceImpact(divergence, lambda float64) float64 {
+	return 100.0 * (1.0 - math.Exp(-lambda*divergence))
 }
 
 func formatBytes(b int64) string {
@@ -203,7 +207,7 @@ func formatBytes(b int64) string {
 	}
 }
 
-func outputText(gitClient *git.GitClient, deltaLines int, deltaBinaryBytes int64, totalLoc1, totalLoc2 int, totalBinBytes1, totalBinBytes2 int64, baseL int, totalBinBytes int64, D, divergence, lambda, wt, wb float64) {
+func outputText(gitClient *git.GitClient, deltaLines int, deltaBinaryBytes int64, avgLoc int, avgBinBytes int64, divergence, lambda float64) {
 	if format == "text" && !noColor {
 		if repoInfo, err := gitClient.GetRepoInfo(); err == nil {
 			fmt.Printf("Repository: %s", color.CyanString(repoInfo))
@@ -220,30 +224,30 @@ func outputText(gitClient *git.GitClient, deltaLines int, deltaBinaryBytes int64
 		return
 	}
 
-	fmt.Printf("  Total LOC:          %s\n", color.CyanString("%d", baseL))
-	fmt.Printf("  Total binary:       %s\n", color.CyanString(formatBytes(totalBinBytes)))
+	fmt.Printf("  Total LOC:          %s\n", color.CyanString("%d", avgLoc))
+	fmt.Printf("  Total binary:       %s\n", color.CyanString(formatBytes(avgBinBytes)))
 	fmt.Printf("  Lines changed:      %s", color.YellowString("%d", deltaLines))
-	if baseL > 0 {
-		fmt.Printf("  (%s of LOC)", color.YellowString("%.1f%%", float64(deltaLines)/float64(baseL)*100))
+	if avgLoc > 0 {
+		fmt.Printf("  (%s of LOC)", color.YellowString("%.1f%%", float64(deltaLines)/float64(avgLoc)*100))
 	}
 	fmt.Println()
 	fmt.Printf("  Binary changed:     %s", color.YellowString(formatBytes(deltaBinaryBytes)))
-	if totalBinBytes > 0 {
-		fmt.Printf("  (%s of binaries)", color.YellowString("%.1f%%", float64(deltaBinaryBytes)/float64(totalBinBytes)*100))
+	if avgBinBytes > 0 {
+		fmt.Printf("  (%s of binaries)", color.YellowString("%.1f%%", float64(deltaBinaryBytes)/float64(avgBinBytes)*100))
 	}
 	fmt.Println()
-	fmt.Printf("  Raw score D:        %s\n", color.CyanString("%.4f", D))
-	fmt.Printf("  Divergence:         %s\n", color.GreenString("%.1f%%", divergence))
+	fmt.Printf("  Raw score D:        %s\n", color.CyanString("%.4f", divergence))
+	fmt.Printf("  Divergence:          %s\n", color.GreenString("%.2f%%", divergence*100))
+	fmt.Printf("  Divergence Impact:   %s\n", color.GreenString("%.1f%%", divergenceImpact(divergence, lambda)))
 }
 
-func outputJSON(deltaLines int, deltaBinaryBytes int64, baseL int, totalBinBytes int64, D, divergence, lambda, wt, wb float64) {
+func outputJSON(deltaLines int, deltaBinaryBytes int64, avgLoc int, avgBinBytes int64, divergence, lambda, weightText, weightBinary float64) {
 	out := struct {
 		TotalLoc         int     `json:"totalLoc"`
 		TotalBinaryBytes int64   `json:"totalBinaryBytes"`
 		DeltaLines       int     `json:"deltaLines"`
 		DeltaBinaryBytes int64   `json:"deltaBinaryBytes"`
 		RawScore         float64 `json:"rawScore"`
-		DivergencePct    float64 `json:"divergencePercent"`
 		Lambda           float64 `json:"lambda"`
 		Sensitivity      string  `json:"sensitivity"`
 		Preset           string  `json:"preset"`
@@ -252,17 +256,16 @@ func outputJSON(deltaLines int, deltaBinaryBytes int64, baseL int, totalBinBytes
 		Branch1          string  `json:"branch1"`
 		Branch2          string  `json:"branch2"`
 	}{
-		TotalLoc:         baseL,
-		TotalBinaryBytes: totalBinBytes,
+		TotalLoc:         avgLoc,
+		TotalBinaryBytes: avgBinBytes,
 		DeltaLines:       deltaLines,
 		DeltaBinaryBytes: deltaBinaryBytes,
-		RawScore:         math.Round(D*10000) / 10000,
-		DivergencePct:    math.Round(divergence*100) / 100,
+		RawScore:         math.Round(divergence*10000) / 10000,
 		Lambda:           math.Round(lambda*100) / 100,
 		Sensitivity:      sensitivity,
 		Preset:           preset,
-		TextWeight:       wt,
-		BinaryWeight:     wb,
+		TextWeight:       weightText,
+		BinaryWeight:     weightBinary,
 		Branch1:          branch1,
 		Branch2:          branch2,
 	}
@@ -273,17 +276,17 @@ func outputJSON(deltaLines int, deltaBinaryBytes int64, baseL int, totalBinBytes
 	fmt.Println(string(jsonData))
 }
 
-func outputCustom(deltaLines int, deltaBinaryBytes int64, baseL int, totalBinBytes int64, D, divergence, lambda, wt, wb float64) {
+func outputCustom(deltaLines int, deltaBinaryBytes int64, avgLoc int, avgBinBytes int64, divergence, lambda, weightText, weightBinary float64) {
 	parts := []string{
-		strconv.FormatFloat(divergence, 'f', 2, 64),
-		strconv.FormatFloat(D, 'f', 4, 64),
+		strconv.FormatFloat(divergence*100, 'f', 2, 64),
+		strconv.FormatFloat(divergence, 'f', 4, 64),
 		strconv.Itoa(deltaLines),
 		strconv.FormatInt(deltaBinaryBytes, 10),
-		strconv.Itoa(baseL),
-		strconv.FormatInt(totalBinBytes, 10),
+		strconv.Itoa(avgLoc),
+		strconv.FormatInt(avgBinBytes, 10),
 		strconv.FormatFloat(lambda, 'f', 2, 64),
-		strconv.FormatFloat(wt, 'f', 2, 64),
-		strconv.FormatFloat(wb, 'f', 2, 64),
+		strconv.FormatFloat(weightText, 'f', 2, 64),
+		strconv.FormatFloat(weightBinary, 'f', 2, 64),
 		preset,
 		sensitivity,
 		branch1,

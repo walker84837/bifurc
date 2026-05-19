@@ -28,121 +28,109 @@ func TestAutoLambda(t *testing.T) {
 }
 
 func TestCalculateDivergence_NoChanges(t *testing.T) {
-	D, div := calculateDivergence(0, 0, 1000, 0, 0.85, 0.15, 1.0)
-	if D != 0 {
-		t.Errorf("D = %.4f, want 0", D)
-	}
-	if div != 0 {
-		t.Errorf("divergence = %.2f, want 0", div)
+	_, _, divergence := calculateDivergence(0, 0, 1000, 0, 0.85, 0.15)
+	if divergence != 0 {
+		t.Errorf("divergence = %.4f, want 0", divergence)
 	}
 }
 
 func TestCalculateDivergence_TextOnly(t *testing.T) {
-	D, div := calculateDivergence(100, 0, 1000, 0, 0.85, 0.15, 1.0)
-	wantD := 0.085
-	if !approxEqual(D, wantD, 0.0001) {
-		t.Errorf("D = %.4f, want %.4f", D, wantD)
+	divergenceText, divergenceBinary, divergence := calculateDivergence(100, 0, 1000, 0, 0.85, 0.15)
+	wantDivergence := 0.085
+	if !approxEqual(divergence, wantDivergence, 0.0001) {
+		t.Errorf("divergence = %.4f, want %.4f", divergence, wantDivergence)
 	}
-	if div <= 0 {
-		t.Errorf("divergence should be > 0 for text-only change, got %.2f", div)
+	if !approxEqual(divergenceText, wantDivergence, 0.0001) {
+		t.Errorf("divergenceText = %.4f, want %.4f", divergenceText, wantDivergence)
 	}
-
-	D2, div2 := calculateDivergence(100, 0, 1000, 0, 0.85, 0.15, 0.5)
-	if D2 != D {
-		t.Errorf("D should be same regardless of lambda: got D=%.4f, want D=%.4f", D2, D)
-	}
-	if div2 >= div {
-		t.Errorf("lower lambda should give lower divergence: got %.2f, want < %.2f", div2, div)
+	if divergenceBinary != 0 {
+		t.Errorf("divergenceBinary = %.4f, want 0", divergenceBinary)
 	}
 }
 
 func TestCalculateDivergence_BinaryOnly(t *testing.T) {
 	totalBin := int64(1024)
 	deltaBin := int64(512)
-	D, div := calculateDivergence(0, deltaBin, 0, totalBin, 0.85, 0.15, 1.0)
-	wantD := (float64(deltaBin) / float64(totalBin)) * 0.15
-	if !approxEqual(D, wantD, 0.0001) {
-		t.Errorf("D = %.4f, want %.4f", D, wantD)
+	divergenceText, divergenceBinary, divergence := calculateDivergence(0, deltaBin, 0, totalBin, 0.85, 0.15)
+	wantDivergence := (float64(deltaBin) / float64(totalBin)) * 0.15
+	if !approxEqual(divergence, wantDivergence, 0.0001) {
+		t.Errorf("divergence = %.4f, want %.4f", divergence, wantDivergence)
 	}
-	if div <= 0 {
-		t.Errorf("divergence should be > 0, got %.2f", div)
+	if !approxEqual(divergenceBinary, wantDivergence, 0.0001) {
+		t.Errorf("divergenceBinary = %.4f, want %.4f", divergenceBinary, wantDivergence)
+	}
+	if divergenceText != 0 {
+		t.Errorf("divergenceText = %.4f, want 0", divergenceText)
 	}
 }
 
 func TestCalculateDivergence_BothTextAndBinary(t *testing.T) {
-	D, div := calculateDivergence(50, 256, 500, 1024, 0.85, 0.15, 1.0)
-	wantD := (50.0/500.0)*0.85 + (256.0/1024.0)*0.15
-	if !approxEqual(D, wantD, 0.0001) {
-		t.Errorf("D = %.4f, want %.4f", D, wantD)
+	divergenceText, divergenceBinary, divergence := calculateDivergence(50, 256, 500, 1024, 0.85, 0.15)
+	wantDivergenceText := (50.0 / 500.0) * 0.85
+	wantDivergenceBinary := (256.0 / 1024.0) * 0.15
+	wantDivergence := wantDivergenceText + wantDivergenceBinary
+	if !approxEqual(divergenceText, wantDivergenceText, 0.0001) {
+		t.Errorf("divergenceText = %.4f, want %.4f", divergenceText, wantDivergenceText)
 	}
-	if div <= 0 {
-		t.Errorf("divergence should be > 0, got %.2f", div)
+	if !approxEqual(divergenceBinary, wantDivergenceBinary, 0.0001) {
+		t.Errorf("divergenceBinary = %.4f, want %.4f", divergenceBinary, wantDivergenceBinary)
+	}
+	if !approxEqual(divergence, wantDivergence, 0.0001) {
+		t.Errorf("divergence = %.4f, want %.4f", divergence, wantDivergence)
 	}
 }
 
 func TestCalculateDivergence_NoTextFiles(t *testing.T) {
-	D, div := calculateDivergence(100, 0, 0, 1024, 0.85, 0.15, 1.0)
-	// baseL=0, so text term skipped; no binary delta, so binary term contributes 0
-	if D != 0 {
-		t.Errorf("D = %.4f, want 0 (no text files, no binary delta)", D)
-	}
-	if div != 0 {
-		t.Errorf("divergence = %.2f, want 0", div)
+	_, _, divergence := calculateDivergence(100, 0, 0, 1024, 0.85, 0.15)
+	// avgLoc=0, so text term skipped; no binary delta, so binary term contributes 0
+	if divergence != 0 {
+		t.Errorf("divergence = %.4f, want 0 (no text files, no binary delta)", divergence)
 	}
 }
 
 func TestCalculateDivergence_NoBinaryFiles(t *testing.T) {
-	D, div := calculateDivergence(100, 1024, 500, 0, 0.85, 0.15, 1.0)
-	wantD := (100.0 / 500.0) * 0.85
-	if !approxEqual(D, wantD, 0.0001) {
-		t.Errorf("D = %.4f, want %.4f", D, wantD)
-	}
-	if div <= 0 {
-		t.Errorf("divergence should be > 0, got %.2f", div)
+	_, _, divergence := calculateDivergence(100, 1024, 500, 0, 0.85, 0.15)
+	wantDivergence := (100.0 / 500.0) * 0.85
+	if !approxEqual(divergence, wantDivergence, 0.0001) {
+		t.Errorf("divergence = %.4f, want %.4f", divergence, wantDivergence)
 	}
 }
 
 func TestCalculateDivergence_EmptyRepo(t *testing.T) {
-	D, div := calculateDivergence(0, 0, 0, 0, 0.85, 0.15, 1.0)
-	if D != 0 {
-		t.Errorf("D = %.4f, want 0 for empty repo", D)
-	}
-	if div != 0 {
-		t.Errorf("divergence = %.2f, want 0 for empty repo", div)
-	}
-}
-
-func TestCalculateDivergence_LambdaEffect(t *testing.T) {
-	_, div1 := calculateDivergence(200, 0, 1000, 0, 0.85, 0.15, 1.0)
-	_, div2 := calculateDivergence(200, 0, 1000, 0, 0.85, 0.15, 2.0)
-	_, div3 := calculateDivergence(200, 0, 1000, 0, 0.85, 0.15, 0.5)
-
-	if div2 <= div1 {
-		t.Errorf("higher lambda should give higher divergence: lambda=2 (%.2f) vs lambda=1 (%.2f)", div2, div1)
-	}
-	if div3 >= div1 {
-		t.Errorf("lower lambda should give lower divergence: lambda=0.5 (%.2f) vs lambda=1 (%.2f)", div3, div1)
-	}
-}
-
-func TestCalculateDivergence_Asymptotic(t *testing.T) {
-	// D=5 with λ=1 → e^-5 ≈ 0.0067 → divergence ≈ 99.33%
-	_, div := calculateDivergence(5000, 0, 1000, 0, 1.0, 0.0, 1.0)
-	if div >= 100 {
-		t.Errorf("divergence should approach 100 asymptotically, got %.2f", div)
-	}
-	if div < 99 {
-		t.Errorf("D=5 should give divergence near 99%%, got %.2f", div)
+	_, _, divergence := calculateDivergence(0, 0, 0, 0, 0.85, 0.15)
+	if divergence != 0 {
+		t.Errorf("divergence = %.4f, want 0 for empty repo", divergence)
 	}
 }
 
 func TestCalculateDivergence_ZeroWeights(t *testing.T) {
-	D, div := calculateDivergence(500, 1024, 1000, 2048, 0, 0, 1.0)
-	if D != 0 {
-		t.Errorf("D should be 0 with zero weights, got %.4f", D)
+	_, _, divergence := calculateDivergence(500, 1024, 1000, 2048, 0, 0)
+	if divergence != 0 {
+		t.Errorf("divergence should be 0 with zero weights, got %.4f", divergence)
 	}
-	if div != 0 {
-		t.Errorf("divergence should be 0 with zero weights, got %.2f", div)
+}
+
+func TestDivergenceImpact(t *testing.T) {
+	di1 := divergenceImpact(0.17, 1.0)
+	di2 := divergenceImpact(0.17, 2.0)
+	di3 := divergenceImpact(0.17, 0.5)
+
+	if di2 <= di1 {
+		t.Errorf("higher lambda should give higher impact: lambda=2 (%.2f) vs lambda=1 (%.2f)", di2, di1)
+	}
+	if di3 >= di1 {
+		t.Errorf("lower lambda should give lower impact: lambda=0.5 (%.2f) vs lambda=1 (%.2f)", di3, di1)
+	}
+}
+
+func TestDivergenceImpact_Asymptotic(t *testing.T) {
+	// D=5 with λ=1 → e^-5 ≈ 0.0067 → divergence impact ≈ 99.33%
+	di := divergenceImpact(5.0, 1.0)
+	if di >= 100 {
+		t.Errorf("divergence impact should approach 100 asymptotically, got %.2f", di)
+	}
+	if di < 99 {
+		t.Errorf("D=5 should give divergence impact near 99%%, got %.2f", di)
 	}
 }
 

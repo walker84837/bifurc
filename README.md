@@ -86,7 +86,7 @@ diffstat calculates a **divergence score** between two Git branches using a form
 ### Formula
 
 $$
-D = \frac{\Delta L}{\max(LOC_1, LOC_2)} \times W_t + \frac{\Delta B}{\max(Bytes_1, Bytes_2)} \times W_b
+D = \frac{\Delta L}{\operatorname{avg}(LOC_1, LOC_2)} \times W_t + \frac{\Delta B}{\operatorname{avg}(Bytes_1, Bytes_2)} \times W_b
 $$
 
 $$
@@ -96,14 +96,14 @@ $$
 | Symbol | Meaning |
 |---|---|
 | ΔL | Total lines added + deleted across all text files (from `git diff --numstat`) |
-| LOC₁, LOC₂ | Total lines of code in each branch |
-| ΔBytes | Sum of \|size₁ − size₂\| for each changed binary file |
-| Bytes₁, Bytes₂ | Total byte size of all binary files in each branch |
+| LOC<sub>1</sub>, LOC<sub>2</sub> | Total lines of code in each branch |
+| ΔBytes | Sum of \|size<sub>1</sub> − size<sub>2</sub>\| for each changed binary file |
+| Bytes<sub>1</sub>, Bytes<sub>2</sub> | Total byte size of all binary files in each branch |
+| avg | The arithmetic mean of the two branch values |
 | Wt, Wb | Text and binary weights (from preset or `--text-weight` / `--binary-weight`) |
-| λ | Lambda — controls how steep the exponential curve is |
-| e | Euler's number |
+| λ | Lambda -- controls how steep the exponential curve is |
 
-The formula uses `max()` for denominators so the result is **symmetric** — swapping branch order gives the same divergence score.
+Using `avg()` keeps the result **symmetric** -- swapping branch order gives the same divergence score -- while giving a more balanced picture of relative change.
 
 ### Presets by Codebase Type
 
@@ -111,16 +111,16 @@ Presets set Wt and Wb to sensible defaults for different project types:
 
 | Preset | Wt | Wb | Best for |
 |---|---|---|---|
-| `systems` | 0.95 | 0.05 | C, C++, Rust, embedded — binaries are compiled output or firmware blobs |
-| `web` | 0.75 | 0.25 | Websites, frontend apps — images, fonts, and icons carry real weight |
-| `ml` | 0.60 | 0.40 | AI/ML — model weights, datasets, and checkpoints are core artifacts |
-| `cli` | 0.92 | 0.08 | CLI tools — almost purely logic-driven |
-| `library` | 0.88 | 0.12 | General-purpose libraries — binaries are test fixtures or native extensions |
+| `systems` | 0.95 | 0.05 | C, C++, Rust, embedded -- binaries are compiled output or firmware blobs |
+| `web` | 0.75 | 0.25 | Websites, frontend apps -- images, fonts, and icons carry real weight |
+| `ml` | 0.60 | 0.40 | AI/ML -- model weights, datasets, and checkpoints are core artifacts |
+| `cli` | 0.92 | 0.08 | CLI tools -- almost purely logic-driven |
+| `library` | 0.88 | 0.12 | General-purpose libraries -- binaries are test fixtures or native extensions |
 | `custom` | 0.85 | 0.15 | Your own weights via `--text-weight` and `--binary-weight` |
 
 ### Auto-calculated Lambda
 
-When `--lambda` is 0 (default), λ is auto-calculated from the larger branch's line count:
+When `--lambda` is 0 (default), λ is auto-calculated from the average branch line count:
 
 $$
 \lambda = \text{clamp}\!\left(0.5,\ \frac{4.0}{\log_{10}(\max(LOC, 10))},\ 2.0\right)
@@ -142,9 +142,9 @@ The `--sensitivity` flag scales the auto-calculated λ:
 
 | Sensitivity | Multiplier | Effect |
 |---|---|---|
-| `low` | × 0.6 | Gentler curve — harder to reach high divergence |
-| `normal` | × 1.0 | Default — the auto-calculated value |
-| `high` | × 1.5 | Steeper curve — divergence feels more urgent |
+| `low` | × 0.6 | Gentler curve -- harder to reach high divergence |
+| `normal` | × 1.0 | Default -- the auto-calculated value |
+| `high` | × 1.5 | Steeper curve -- divergence feels more urgent |
 
 Use `--lambda N` to override entirely, bypassing both auto-calculation and sensitivity.
 
@@ -159,8 +159,9 @@ Repository: my-repo (web preset) (λ=1.00, sensitivity=normal)
   Total binary:        2.3 MB
   Lines changed:         142  (1.4% of LOC)
   Binary changed:      1.2 KB  (0.1% of binaries)
-  Raw score D:         0.023
-  Divergence:           3.1%
+  Raw score D:         0.0234
+  Divergence:           2.34%
+  Divergence Impact:    3.10%
 ```
 
 ### JSON
@@ -171,8 +172,7 @@ Repository: my-repo (web preset) (λ=1.00, sensitivity=normal)
   "totalBinaryBytes": 2359296,
   "deltaLines": 142,
   "deltaBinaryBytes": 1228,
-  "rawScore": 0.023,
-  "divergencePercent": 3.10,
+  "rawScore": 0.0234,
   "lambda": 1.00,
   "sensitivity": "normal",
   "preset": "web",
@@ -188,29 +188,40 @@ Repository: my-repo (web preset) (λ=1.00, sensitivity=normal)
 Tab-separated fields for scripting (customize separator with `--separator`):
 
 ```
-divergencePercent  rawScore  deltaLines  deltaBinaryBytes  totalLoc  totalBinaryBytes  lambda  wt  wb  preset  sensitivity  branch1  branch2
+divergence  rawScore  deltaLines  deltaBinaryBytes  avgLoc  avgBinaryBytes  lambda  wt  wb  preset  sensitivity  branch1  branch2
 ```
+
+The first field (`divergence`) is `D × 100` -- the same objective percentage shown as "Divergence" in text output.
 
 Example:
 ```bash
 ./diffstat --branch1 main --branch2 feature --format custom --separator $'\t'
 ```
 
-## Interpreting the Divergence Percentage
+## Interpreting the Output
 
-The divergence percentage follows an **exponential curve** — small changes produce proportional results, but large changes compress as they approach 100%. This makes the scale feel natural across repos of any size.
+Text output shows two metrics:
 
-| Divergence | Interpretation |
+| Metric | What it is |
+|---|---|
+| **Divergence** | `D × 100` -- the linear, objective measure of change as a percentage of the average codebase size |
+| **Divergence Impact** | `100 × (1 − e^(−λᴰ))` -- a display-oriented exponential curve that compresses large values |
+
+**Divergence** is the precise metric: it tells you what fraction of the codebase changed. **Divergence Impact** is a presentational transform that gives a more intuitive feel, especially for small changes, but should not be treated as a high-precision number.
+
+### Divergence Impact scale
+
+| Impact | Interpretation |
 |---|---|
 | **0%** | Branches are identical (no diff) |
-| **~1–5%** | Routine change — small hotfix or minor PR |
-| **~5–20%** | Normal feature branch — measured work |
+| **~1–5%** | Routine change -- small hotfix or minor PR |
+| **~5–20%** | Normal feature branch -- measured work |
 | **~20–40%** | Large PR or short-lived fork |
-| **~40–65%** | Significant divergence — weeks of parallel work |
-| **~65–85%** | Heavy divergence — near-rewrite of substantial parts |
-| **85–100%** | Extreme divergence — completely independent branches |
+| **~40–65%** | Significant divergence -- weeks of parallel work |
+| **~65–85%** | Heavy divergence -- near-rewrite of substantial parts |
+| **85–100%** | Extreme divergence -- completely independent branches |
 
-The curve is asymptotic: you will never reach exactly 100% (unless D is infinite). This is intentional — even a total rewrite still shares some structure (directory layout, config files, etc.) with the original.
+The curve is asymptotic: you will never reach exactly 100% (unless D is infinite). This is intentional -- even a total rewrite still shares some structure (directory layout, config files, etc.) with the original.
 
 ## Contributing
 
