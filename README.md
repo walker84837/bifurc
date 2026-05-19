@@ -42,7 +42,7 @@ This compares the two branches and outputs a divergence score from 0% to near 10
 ## Flags
 
 | Flag | Default | Description |
-|---|---|---|
+|---|:---:|---|
 | `--branch1` | `""` | First branch (required) |
 | `--branch2` | `""` | Second branch (required) |
 | `--format` | `text` | Output format: `text`, `json`, `custom` |

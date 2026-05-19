@@ -10,16 +10,20 @@ import (
 	"strings"
 )
 
+// GitClient is a simple wrapper around running git commands with exec.Command().
 type GitClient struct {
+	// Dir is the directory where commands are run
 	Dir string
 }
 
 var globalGitClient = NewGitClient()
 
+// GetGitClient returns a reference to the global git client.
 func GetGitClient() *GitClient {
 	return globalGitClient
 }
 
+// NewGitClient returns a new instance of a GitClient.
 func NewGitClient() *GitClient {
 	return &GitClient{}
 }
@@ -32,6 +36,8 @@ func (c *GitClient) gitCmd(args ...string) *exec.Cmd {
 	return cmd
 }
 
+// GetOrigin returns the repository's "origin" remote, or an error if the command
+// fails.
 func (c *GitClient) GetOrigin() (string, error) {
 	out, err := c.gitCmd("remote", "get-url", "origin").CombinedOutput()
 	if err != nil {
@@ -40,11 +46,14 @@ func (c *GitClient) GetOrigin() (string, error) {
 	return string(out), nil
 }
 
+// CheckBranch returns true if the given branch (or ref) exists in the repository.
 func (c *GitClient) CheckBranch(branch string) bool {
 	err := c.gitCmd("rev-parse", "--verify", branch).Run()
 	return err == nil
 }
 
+// GetRepoInfo returns the repository name from the Git origin URL (falls back to
+// current directory name if origin is unavailable).
 func (c *GitClient) GetRepoInfo() (string, error) {
 	out, err := c.GetOrigin()
 	if err != nil {
@@ -64,6 +73,7 @@ func (c *GitClient) GetRepoInfo() (string, error) {
 	return remoteURL, nil
 }
 
+// GetEmptyTreeHash returns the SHA-1 hash of an empty Git tree, or an error if the command fails.
 func (c *GitClient) GetEmptyTreeHash() (string, error) {
 	cmd := c.gitCmd("hash-object", "-t", "tree", "--stdin")
 	cmd.Stdin = bytes.NewReader([]byte{})
@@ -71,6 +81,8 @@ func (c *GitClient) GetEmptyTreeHash() (string, error) {
 	return strings.TrimSpace(string(out)), err
 }
 
+// GetTextDiff returns the total number of changed text lines and a list of binary files changed
+// between two git revisions b1 and b2, or an error.
 func (c *GitClient) GetTextDiff(b1, b2 string) (deltaLines int, changedBinaryFiles []string, err error) {
 	out, err := c.gitCmd("diff", "--numstat", b1, b2).Output()
 	if err != nil {
@@ -110,6 +122,8 @@ func (c *GitClient) getBlobSize(branch, file string) (int64, error) {
 	return strconv.ParseInt(strings.TrimSpace(string(out)), 10, 64)
 }
 
+// GetBinaryByteDelta computes the total absolute byte-size difference across the given files
+// between two Git object references (b1 and b2).
 func (c *GitClient) GetBinaryByteDelta(b1, b2 string, files []string) (int64, error) {
 	var delta int64
 	for _, file := range files {
@@ -166,6 +180,8 @@ func (c *GitClient) parseLsTreeSizeMap(branch string) (map[string]int64, error) 
 	return sizeMap, nil
 }
 
+// GetRepoStats computes repository statistics for a branch: it returns total non-binary lines
+// of code (totalLoc) and total size of binary files in bytes (totalBinarySize). Returns an error on failure.
 func (c *GitClient) GetRepoStats(branch string) (totalLoc int, totalBinarySize int64, err error) {
 	emptyTree, err := c.GetEmptyTreeHash()
 	if err != nil {
