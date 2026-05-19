@@ -1,8 +1,8 @@
-# diffstat
+# bifurc
 
-> Compare how different two Git branches are.
+> bifurc (short for *bifurcate*, to divide into two branches) - measures how different two Git branches are.
 
-[![Build Source Code](https://github.com/walker84837/diffstat/actions/workflows/build.yml/badge.svg)](https://github.com/walker84837/diffstat/actions/workflows/build.yml)
+[![Build Source Code](https://github.com/walker84837/bifurc/actions/workflows/build.yml/badge.svg)](https://github.com/walker84837/bifurc/actions/workflows/build.yml)
 [![License: MPL-2.0](https://img.shields.io/badge/License-MPL--2.0-blue.svg)](LICENSE)
 
 ## Table of Contents
@@ -26,22 +26,21 @@
 ## Installation
 
 ```bash
-```bash
-go install github.com/walker84837/diffstat@latest
+go install github.com/walker84837/bifurc@latest
 ```
 
 Or clone and build from source:
 
 ```bash
-git clone https://github.com/walker84837/diffstat.git
-cd diffstat
+git clone https://github.com/walker84837/bifurc.git
+cd bifurc
 go build
 ```
 
 ## Usage
 
 ```bash
-./diffstat --branch1 main --branch2 feature-branch
+./bifurc --branch1 main --branch2 feature-branch
 ```
 
 This compares the two branches and outputs a divergence score from 0% to near 100%.
@@ -65,30 +64,30 @@ This compares the two branches and outputs a divergence score from 0% to near 10
 
 ```bash
 # Basic comparison
-./diffstat --branch1 main --branch2 feature-branch
+./bifurc --branch1 main --branch2 feature-branch
 
 # Machine-readable JSON output
-./diffstat --branch1 main --branch2 feature-branch --format json
+./bifurc --branch1 main --branch2 feature-branch --format json
 
 # ML project preset (higher binary weight for model weights)
-./diffstat --branch1 main --branch2 feature-branch --preset ml
+./bifurc --branch1 main --branch2 feature-branch --preset ml
 
 # Gentle curve, scripting-friendly output
-./diffstat --branch1 develop --branch2 main --sensitivity low --format custom --separator $'\t'
+./bifurc --branch1 develop --branch2 main --sensitivity low --format custom --separator $'\t'
 
 # Manual lambda override (λ = 1.5)
-./diffstat --branch1 HEAD~5 --branch2 HEAD --lambda 1.5
+./bifurc --branch1 HEAD~5 --branch2 HEAD --lambda 1.5
 
 # Custom weights for a unique codebase
-./diffstat --branch1 main --branch2 experiment --preset custom --text-weight 0.9 --binary-weight 0.1
+./bifurc --branch1 main --branch2 experiment --preset custom --text-weight 0.9 --binary-weight 0.1
 
 # Disable colors for CI pipelines
-./diffstat --branch1 main --branch2 feature --no-color
+./bifurc --branch1 main --branch2 feature --no-color
 ```
 
 ## How It Works
 
-diffstat calculates a **divergence score** between two Git branches using a formula that accounts for both text and binary file changes, normalized to the size of the codebase.
+bifurc calculates a **divergence score** between two Git branches using a formula that accounts for both text and binary file changes, normalized to the size of the codebase.
 
 ### Formula
 
@@ -202,7 +201,7 @@ The first field (`divergence`) is `D × 100` -- the same objective percentage sh
 
 Example:
 ```bash
-./diffstat --branch1 main --branch2 feature --format custom --separator $'\t'
+./bifurc --branch1 main --branch2 feature --format custom --separator $'\t'
 ```
 
 ## Interpreting the Output
@@ -232,7 +231,7 @@ The curve is asymptotic: you will never reach exactly 100% (unless D is infinite
 
 ## Contributing
 
-Contributions are welcome. Open an issue or submit a pull request on [GitHub](https://github.com/walker84837/diffstat).
+Contributions are welcome. Open an issue or submit a pull request on [GitHub](https://github.com/walker84837/bifurc).
 
 ## License
 

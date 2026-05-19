@@ -1,4 +1,4 @@
-package diffstat
+package bifurc
 
 import (
 	"bytes"

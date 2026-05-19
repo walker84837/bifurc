@@ -26,5 +26,6 @@ go.work.sum
 .env
 
 # Built binary
+/bifurc
 /diffstat
 

@@ -1,4 +1,4 @@
-module github.com/walker84837/diffstat
+module github.com/walker84837/bifurc
 
 go 1.25.0
 

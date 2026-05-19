@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	git "github.com/walker84837/diffstat/pkg"
+	bifurc "github.com/walker84837/bifurc/pkg"
 
 	"github.com/fatih/color"
 )
@@ -59,7 +59,7 @@ func init() {
 	flag.Float64Var(&binaryWeight, "binary-weight", 0.15, "Binary weight (only with --preset custom)")
 
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "diffstat - Compare Git branches and show divergence statistics\n\n")
+		fmt.Fprintf(os.Stderr, "bifurc - Compare Git branches and show divergence statistics\n\n")
 		fmt.Fprintf(os.Stderr, "Usage: %s [options]\n\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "Examples:\n")
 		fmt.Fprintf(os.Stderr, "  %s --branch1 main --branch2 feature-branch\n", os.Args[0])
@@ -77,7 +77,7 @@ func main() {
 		outputError("Both --branch1 and --branch2 are required")
 	}
 
-	gitClient := git.GetGitClient()
+	gitClient := bifurc.GetGitClient()
 
 	if !gitClient.CheckBranch(branch1) {
 		outputError(fmt.Sprintf("Invalid branch1 '%s': branch does not exist", branch1))
@@ -207,7 +207,7 @@ func formatBytes(b int64) string {
 	}
 }
 
-func outputText(gitClient *git.GitClient, deltaLines int, deltaBinaryBytes int64, avgLoc int, avgBinBytes int64, divergence, lambda float64) {
+func outputText(gitClient *bifurc.GitClient, deltaLines int, deltaBinaryBytes int64, avgLoc int, avgBinBytes int64, divergence, lambda float64) {
 	if format == "text" && !noColor {
 		if repoInfo, err := gitClient.GetRepoInfo(); err == nil {
 			fmt.Printf("Repository: %s", color.CyanString(repoInfo))
