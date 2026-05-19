@@ -43,7 +43,7 @@ func (c *GitClient) GetOrigin() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("could not get origin: %v", err)
 	}
-	return string(out), nil
+	return strings.TrimSpace(string(out)), nil
 }
 
 // CheckBranch returns true if the given branch (or ref) exists in the repository.
@@ -145,11 +145,6 @@ func (c *GitClient) GetBinaryByteDelta(b1, b2 string, files []string) (int64, er
 		delta += diff
 	}
 	return delta, nil
-}
-
-type branchStats struct {
-	totalLoc        int
-	totalBinarySize int64
 }
 
 func (c *GitClient) parseLsTreeSizeMap(branch string) (map[string]int64, error) {

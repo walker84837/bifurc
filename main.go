@@ -102,10 +102,7 @@ func main() {
 		outputError("Lambda must be >= 0")
 	}
 
-	pw, ok := presets[preset]
-	if !ok {
-		pw = presets["custom"]
-	}
+	pw := presets[preset]
 
 	weightText := pw.weightText
 	weightBinary := pw.weightBinary
@@ -148,11 +145,11 @@ func main() {
 
 	switch format {
 	case "text":
-		outputText(gitClient, deltaLines, deltaBinaryBytes, avgLoc, avgBinBytes, divergence, lambda)
+		outputText(gitClient, deltaLines, deltaBinaryBytes, avgLoc, avgBinBytes, divergence, lambda, branch1, branch2, preset, sensitivity, format, noColor)
 	case "json":
-		outputJSON(deltaLines, deltaBinaryBytes, avgLoc, avgBinBytes, divergence, lambda, weightText, weightBinary)
+		outputJSON(deltaLines, deltaBinaryBytes, avgLoc, avgBinBytes, divergence, lambda, weightText, weightBinary, branch1, branch2, preset, sensitivity)
 	case "custom":
-		outputCustom(deltaLines, deltaBinaryBytes, avgLoc, avgBinBytes, divergence, lambda, weightText, weightBinary)
+		outputCustom(deltaLines, deltaBinaryBytes, avgLoc, avgBinBytes, divergence, lambda, weightText, weightBinary, branch1, branch2, preset, sensitivity, separator)
 	default:
 		outputError("Invalid output format specified")
 	}
@@ -207,7 +204,7 @@ func formatBytes(b int64) string {
 	}
 }
 
-func outputText(gitClient *bifurc.GitClient, deltaLines int, deltaBinaryBytes int64, avgLoc int, avgBinBytes int64, divergence, lambda float64) {
+func outputText(gitClient *bifurc.GitClient, deltaLines int, deltaBinaryBytes int64, avgLoc int, avgBinBytes int64, divergence, lambda float64, branch1, branch2, preset, sensitivity, format string, noColor bool) {
 	if format == "text" && !noColor {
 		if repoInfo, err := gitClient.GetRepoInfo(); err == nil {
 			fmt.Printf("Repository: %s", color.CyanString(repoInfo))
@@ -241,7 +238,7 @@ func outputText(gitClient *bifurc.GitClient, deltaLines int, deltaBinaryBytes in
 	fmt.Printf("  Divergence Impact:   %s\n", color.GreenString("%.1f%%", divergenceImpact(divergence, lambda)))
 }
 
-func outputJSON(deltaLines int, deltaBinaryBytes int64, avgLoc int, avgBinBytes int64, divergence, lambda, weightText, weightBinary float64) {
+func outputJSON(deltaLines int, deltaBinaryBytes int64, avgLoc int, avgBinBytes int64, divergence, lambda, weightText, weightBinary float64, branch1, branch2, preset, sensitivity string) {
 	out := struct {
 		TotalLoc         int     `json:"totalLoc"`
 		TotalBinaryBytes int64   `json:"totalBinaryBytes"`
@@ -276,7 +273,7 @@ func outputJSON(deltaLines int, deltaBinaryBytes int64, avgLoc int, avgBinBytes 
 	fmt.Println(string(jsonData))
 }
 
-func outputCustom(deltaLines int, deltaBinaryBytes int64, avgLoc int, avgBinBytes int64, divergence, lambda, weightText, weightBinary float64) {
+func outputCustom(deltaLines int, deltaBinaryBytes int64, avgLoc int, avgBinBytes int64, divergence, lambda, weightText, weightBinary float64, branch1, branch2, preset, sensitivity, separator string) {
 	parts := []string{
 		strconv.FormatFloat(divergence*100, 'f', 2, 64),
 		strconv.FormatFloat(divergence, 'f', 4, 64),

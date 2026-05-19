@@ -194,7 +194,7 @@ Repository: my-repo (web preset) (λ=1.00, sensitivity=normal)
 Tab-separated fields for scripting (customize separator with `--separator`):
 
 ```
-divergence  rawScore  deltaLines  deltaBinaryBytes  avgLoc  avgBinaryBytes  lambda  wt  wb  preset  sensitivity  branch1  branch2
+divergence  rawScore  deltaLines  deltaBinaryBytes  avgLoc  avgBinaryBytes  lambda  weightText  weightBinary  preset  sensitivity  branch1  branch2
 ```
 
 The first field (`divergence`) is `D × 100` -- the same objective percentage shown as "Divergence" in text output.
