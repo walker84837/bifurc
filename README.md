@@ -26,6 +26,13 @@
 ## Installation
 
 ```bash
+```bash
+go install github.com/walker84837/diffstat@latest
+```
+
+Or clone and build from source:
+
+```bash
 git clone https://github.com/walker84837/diffstat.git
 cd diffstat
 go build

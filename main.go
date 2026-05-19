@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	git "diffstat/pkg"
+	git "github.com/walker84837/diffstat/pkg"
 
 	"github.com/fatih/color"
 )

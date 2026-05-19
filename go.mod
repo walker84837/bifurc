@@ -1,4 +1,4 @@
-module diffstat
+module github.com/walker84837/diffstat
 
 go 1.25.0
 
