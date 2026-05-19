@@ -2,13 +2,17 @@ package bifurc
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
+
+const gitTimeout = 30 * time.Second
 
 // GitClient is a simple wrapper around running git commands with exec.Command().
 type GitClient struct {
@@ -29,10 +33,14 @@ func NewGitClient() *GitClient {
 }
 
 func (c *GitClient) gitCmd(args ...string) *exec.Cmd {
-	cmd := exec.Command("git", args...)
+	ctx, cancel := context.WithTimeout(context.Background(), gitTimeout)
+	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd.Cancel = func() error { return cmd.Process.Signal(os.Interrupt) }
+	cmd.WaitDelay = 5 * time.Second
 	if c.Dir != "" {
 		cmd.Dir = c.Dir
 	}
+	_ = cancel
 	return cmd
 }
 
@@ -105,8 +113,14 @@ func (c *GitClient) GetTextDiff(b1, b2 string) (deltaLines int, changedBinaryFil
 		if additions == "-" || deletions == "-" {
 			changedBinaryFiles = append(changedBinaryFiles, path)
 		} else {
-			add, _ := strconv.Atoi(additions)
-			del, _ := strconv.Atoi(deletions)
+			add, err := strconv.Atoi(additions)
+			if err != nil {
+				return 0, nil, fmt.Errorf("could not parse additions %q for %s: %v", additions, path, err)
+			}
+			del, err := strconv.Atoi(deletions)
+			if err != nil {
+				return 0, nil, fmt.Errorf("could not parse deletions %q for %s: %v", deletions, path, err)
+			}
 			deltaLines += add + del
 		}
 	}
@@ -169,7 +183,10 @@ func (c *GitClient) parseLsTreeSizeMap(branch string) (map[string]int64, error) 
 		if len(metaParts) < 4 {
 			continue
 		}
-		size, _ := strconv.ParseInt(metaParts[3], 10, 64)
+		size, err := strconv.ParseInt(metaParts[3], 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("could not parse size %q for %s: %v", metaParts[3], path, err)
+		}
 		sizeMap[path] = size
 	}
 	return sizeMap, nil
@@ -211,7 +228,10 @@ func (c *GitClient) GetRepoStats(branch string) (totalLoc int, totalBinarySize i
 				totalBinarySize += size
 			}
 		} else {
-			add, _ := strconv.Atoi(additions)
+			add, err := strconv.Atoi(additions)
+			if err != nil {
+				return 0, 0, fmt.Errorf("could not parse additions %q for %s: %v", additions, path, err)
+			}
 			totalLoc += add
 		}
 	}

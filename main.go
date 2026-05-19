@@ -75,20 +75,20 @@ func main() {
 	flag.Parse()
 
 	if _, err := exec.LookPath("git"); err != nil {
-		outputError("git is not installed or not in PATH")
+		outputError("git is not installed or not in PATH", format)
 	}
 
 	if branch1 == "" || branch2 == "" {
-		outputError("Both --branch1 and --branch2 are required")
+		outputError("Both --branch1 and --branch2 are required", format)
 	}
 
 	gitClient := bifurc.GetGitClient()
 
 	if !gitClient.CheckBranch(branch1) {
-		outputError(fmt.Sprintf("Invalid branch1 '%s': branch does not exist", branch1))
+		outputError(fmt.Sprintf("Invalid branch1 '%s': branch does not exist", branch1), format)
 	}
 	if !gitClient.CheckBranch(branch2) {
-		outputError(fmt.Sprintf("Invalid branch2 '%s': branch does not exist", branch2))
+		outputError(fmt.Sprintf("Invalid branch2 '%s': branch does not exist", branch2), format)
 	}
 
 	if format != "text" {
@@ -98,13 +98,13 @@ func main() {
 	}
 
 	if _, ok := presets[preset]; !ok {
-		outputError(fmt.Sprintf("Invalid preset '%s': must be one of systems, web, ml, cli, library, custom", preset))
+		outputError(fmt.Sprintf("Invalid preset '%s': must be one of systems, web, ml, cli, library, custom", preset), format)
 	}
 	if _, ok := sensitivityMult[sensitivity]; !ok {
-		outputError(fmt.Sprintf("Invalid sensitivity '%s': must be one of low, normal, high", sensitivity))
+		outputError(fmt.Sprintf("Invalid sensitivity '%s': must be one of low, normal, high", sensitivity), format)
 	}
 	if lambdaFlag < 0 {
-		outputError("Lambda must be >= 0")
+		outputError("Lambda must be >= 0", format)
 	}
 
 	pw := presets[preset]
@@ -117,46 +117,46 @@ func main() {
 	}
 
 	if math.Abs(weightText+weightBinary-1.0) > 1e-6 {
-		outputError(fmt.Sprintf("Weights must sum to 1.0, got weightText=%.2f, weightBinary=%.2f (sum=%.4f)", weightText, weightBinary, weightText+weightBinary))
+		outputError(fmt.Sprintf("Weights must sum to 1.0, got weightText=%.2f, weightBinary=%.2f (sum=%.4f)", weightText, weightBinary, weightText+weightBinary), format)
 	}
 
 	deltaLines, binaryFiles, err := gitClient.GetTextDiff(branch1, branch2)
 	if err != nil {
-		outputError(err.Error())
+		outputError(err.Error(), format)
 	}
 
 	var deltaBinaryBytes int64
 	if len(binaryFiles) > 0 {
 		deltaBinaryBytes, err = gitClient.GetBinaryByteDelta(branch1, branch2, binaryFiles)
 		if err != nil {
-			outputError(err.Error())
+			outputError(err.Error(), format)
 		}
 	}
 
 	totalLoc1, totalBinBytes1, err := gitClient.GetRepoStats(branch1)
 	if err != nil {
-		outputError(err.Error())
+		outputError(err.Error(), format)
 	}
 	totalLoc2, totalBinBytes2, err := gitClient.GetRepoStats(branch2)
 	if err != nil {
-		outputError(err.Error())
+		outputError(err.Error(), format)
 	}
 
 	avgLoc := (totalLoc1 + totalLoc2) / 2
-	avgBinBytes := (totalBinBytes1 + totalBinBytes2) / 2
+	avgBinaryBytes := (totalBinBytes1 + totalBinBytes2) / 2
 
 	lambda := resolveLambda(lambdaFlag, sensitivity, avgLoc)
-	_, _, divergence := calculateDivergence(deltaLines, deltaBinaryBytes, avgLoc, avgBinBytes, weightText, weightBinary)
+	_, _, divergence := calculateDivergence(deltaLines, deltaBinaryBytes, avgLoc, avgBinaryBytes, weightText, weightBinary)
 
 	switch format {
 	case "text":
-		outputText(gitClient, deltaLines, deltaBinaryBytes, avgLoc, avgBinBytes, divergence, lambda, branch1, branch2, preset, sensitivity, format, noColor)
+		outputText(gitClient, deltaLines, deltaBinaryBytes, avgLoc, avgBinaryBytes, divergence, lambda, branch1, branch2, preset, sensitivity, format, noColor)
 	case "json":
-		outputJSON(deltaLines, deltaBinaryBytes, avgLoc, avgBinBytes, divergence, lambda, weightText, weightBinary, branch1, branch2, preset, sensitivity)
+		outputJSON(deltaLines, deltaBinaryBytes, avgLoc, avgBinaryBytes, divergence, lambda, weightText, weightBinary, branch1, branch2, preset, sensitivity)
 	case "custom":
-		outputCustom(deltaLines, deltaBinaryBytes, avgLoc, avgBinBytes, divergence, lambda, weightText, weightBinary, branch1, branch2, preset, sensitivity, separator)
+		outputCustom(deltaLines, deltaBinaryBytes, avgLoc, avgBinaryBytes, divergence, lambda, weightText, weightBinary, branch1, branch2, preset, sensitivity, separator)
 	default:
-		outputError("Invalid output format specified")
+		outputError("Invalid output format specified", format)
 	}
 }
 
@@ -178,15 +178,19 @@ func resolveLambda(lambdaFlag float64, sensitivity string, baseL int) float64 {
 	if lambdaFlag > 0 {
 		return lambdaFlag
 	}
-	return autoLambda(baseL) * sensitivityMult[sensitivity]
+	mult, ok := sensitivityMult[sensitivity]
+	if !ok {
+		mult = 1.0
+	}
+	return autoLambda(baseL) * mult
 }
 
-func calculateDivergence(deltaLines int, deltaBinaryBytes int64, avgLoc int, avgBinBytes int64, weightText, weightBinary float64) (divergenceText, divergenceBinary, divergence float64) {
+func calculateDivergence(deltaLines int, deltaBinaryBytes int64, avgLoc int, avgBinaryBytes int64, weightText, weightBinary float64) (divergenceText, divergenceBinary, divergence float64) {
 	if avgLoc > 0 {
 		divergenceText = (float64(deltaLines) / float64(avgLoc)) * weightText
 	}
-	if avgBinBytes > 0 {
-		divergenceBinary = (float64(deltaBinaryBytes) / float64(avgBinBytes)) * weightBinary
+	if avgBinaryBytes > 0 {
+		divergenceBinary = (float64(deltaBinaryBytes) / float64(avgBinaryBytes)) * weightBinary
 	}
 	divergence = divergenceText + divergenceBinary
 	return
@@ -209,7 +213,7 @@ func formatBytes(b int64) string {
 	}
 }
 
-func outputText(gitClient *bifurc.GitClient, deltaLines int, deltaBinaryBytes int64, avgLoc int, avgBinBytes int64, divergence, lambda float64, branch1, branch2, preset, sensitivity, format string, noColor bool) {
+func outputText(gitClient *bifurc.GitClient, deltaLines int, deltaBinaryBytes int64, avgLoc int, avgBinaryBytes int64, divergence, lambda float64, branch1, branch2, preset, sensitivity, format string, noColor bool) {
 	if format == "text" && !noColor {
 		if repoInfo, err := gitClient.GetRepoInfo(); err == nil {
 			fmt.Printf("Repository: %s", color.CyanString(repoInfo))
@@ -227,15 +231,15 @@ func outputText(gitClient *bifurc.GitClient, deltaLines int, deltaBinaryBytes in
 	}
 
 	fmt.Printf("  Total LOC:          %s\n", color.CyanString("%d", avgLoc))
-	fmt.Printf("  Total binary:       %s\n", color.CyanString(formatBytes(avgBinBytes)))
+	fmt.Printf("  Total binary:       %s\n", color.CyanString(formatBytes(avgBinaryBytes)))
 	fmt.Printf("  Lines changed:      %s", color.YellowString("%d", deltaLines))
 	if avgLoc > 0 {
 		fmt.Printf("  (%s of LOC)", color.YellowString("%.1f%%", float64(deltaLines)/float64(avgLoc)*100))
 	}
 	fmt.Println()
 	fmt.Printf("  Binary changed:     %s", color.YellowString(formatBytes(deltaBinaryBytes)))
-	if avgBinBytes > 0 {
-		fmt.Printf("  (%s of binaries)", color.YellowString("%.1f%%", float64(deltaBinaryBytes)/float64(avgBinBytes)*100))
+	if avgBinaryBytes > 0 {
+		fmt.Printf("  (%s of binaries)", color.YellowString("%.1f%%", float64(deltaBinaryBytes)/float64(avgBinaryBytes)*100))
 	}
 	fmt.Println()
 	fmt.Printf("  Raw score D:        %s\n", color.CyanString("%.4f", divergence))
@@ -243,7 +247,7 @@ func outputText(gitClient *bifurc.GitClient, deltaLines int, deltaBinaryBytes in
 	fmt.Printf("  Divergence Impact:   %s\n", color.GreenString("%.1f%%", divergenceImpact(divergence, lambda)))
 }
 
-func outputJSON(deltaLines int, deltaBinaryBytes int64, avgLoc int, avgBinBytes int64, divergence, lambda, weightText, weightBinary float64, branch1, branch2, preset, sensitivity string) {
+func outputJSON(deltaLines int, deltaBinaryBytes int64, avgLoc int, avgBinaryBytes int64, divergence, lambda, weightText, weightBinary float64, branch1, branch2, preset, sensitivity string) {
 	out := struct {
 		TotalLoc         int     `json:"totalLoc"`
 		TotalBinaryBytes int64   `json:"totalBinaryBytes"`
@@ -259,7 +263,7 @@ func outputJSON(deltaLines int, deltaBinaryBytes int64, avgLoc int, avgBinBytes 
 		Branch2          string  `json:"branch2"`
 	}{
 		TotalLoc:         avgLoc,
-		TotalBinaryBytes: avgBinBytes,
+		TotalBinaryBytes: avgBinaryBytes,
 		DeltaLines:       deltaLines,
 		DeltaBinaryBytes: deltaBinaryBytes,
 		RawScore:         math.Round(divergence*10000) / 10000,
@@ -273,19 +277,19 @@ func outputJSON(deltaLines int, deltaBinaryBytes int64, avgLoc int, avgBinBytes 
 	}
 	jsonData, err := json.Marshal(out)
 	if err != nil {
-		outputError(fmt.Sprintf("Error generating JSON: %v", err))
+		outputError(fmt.Sprintf("Error generating JSON: %v", err), format)
 	}
 	fmt.Println(string(jsonData))
 }
 
-func outputCustom(deltaLines int, deltaBinaryBytes int64, avgLoc int, avgBinBytes int64, divergence, lambda, weightText, weightBinary float64, branch1, branch2, preset, sensitivity, separator string) {
+func outputCustom(deltaLines int, deltaBinaryBytes int64, avgLoc int, avgBinaryBytes int64, divergence, lambda, weightText, weightBinary float64, branch1, branch2, preset, sensitivity, separator string) {
 	parts := []string{
 		strconv.FormatFloat(divergence*100, 'f', 2, 64),
 		strconv.FormatFloat(divergence, 'f', 4, 64),
 		strconv.Itoa(deltaLines),
 		strconv.FormatInt(deltaBinaryBytes, 10),
 		strconv.Itoa(avgLoc),
-		strconv.FormatInt(avgBinBytes, 10),
+		strconv.FormatInt(avgBinaryBytes, 10),
 		strconv.FormatFloat(lambda, 'f', 2, 64),
 		strconv.FormatFloat(weightText, 'f', 2, 64),
 		strconv.FormatFloat(weightBinary, 'f', 2, 64),
@@ -298,7 +302,7 @@ func outputCustom(deltaLines int, deltaBinaryBytes int64, avgLoc int, avgBinByte
 }
 
 // outputError outputs an error message based on the configured format and exits the program with code 1.
-func outputError(message string) {
+func outputError(message string, format string) {
 	switch format {
 	case "json":
 		errJSON := struct {
