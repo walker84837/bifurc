@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 
@@ -72,6 +73,10 @@ func init() {
 
 func main() {
 	flag.Parse()
+
+	if _, err := exec.LookPath("git"); err != nil {
+		outputError("git is not installed or not in PATH")
+	}
 
 	if branch1 == "" || branch2 == "" {
 		outputError("Both --branch1 and --branch2 are required")
@@ -292,6 +297,7 @@ func outputCustom(deltaLines int, deltaBinaryBytes int64, avgLoc int, avgBinByte
 	fmt.Println(strings.Join(parts, separator))
 }
 
+// outputError outputs an error message based on the configured format and exits the program with code 1.
 func outputError(message string) {
 	switch format {
 	case "json":
