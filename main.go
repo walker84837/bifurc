@@ -21,6 +21,7 @@ var (
 	format       string
 	separator    string
 	noColor      bool
+	detailed     bool
 	preset       string
 	sensitivity  string
 	lambdaFlag   float64
@@ -53,6 +54,7 @@ func init() {
 	flag.StringVar(&format, "format", "text", "Output format: text, json, custom")
 	flag.StringVar(&separator, "separator", "\n", "Separator for custom output format")
 	flag.BoolVar(&noColor, "no-color", false, "Disable color output")
+	flag.BoolVar(&detailed, "detailed", false, "Show detailed component breakdown (text output only)")
 	flag.StringVar(&preset, "preset", "custom", "Codebase type preset: systems, web, ml, cli, library, custom")
 	flag.StringVar(&sensitivity, "sensitivity", "normal", "Curve sensitivity: low, normal, high")
 	flag.Float64Var(&lambdaFlag, "lambda", 0, "Lambda override (0 = auto-calculate)")
@@ -146,11 +148,11 @@ func main() {
 	avgBinaryBytes := (totalBinBytes1 + totalBinBytes2) / 2
 
 	lambda := resolveLambda(lambdaFlag, sensitivity, avgLoc)
-	_, _, divergence := calculateDivergence(deltaLines, deltaBinaryBytes, avgLoc, avgBinaryBytes, weightText, weightBinary)
+	divergenceText, divergenceBinary, divergence := calculateDivergence(deltaLines, deltaBinaryBytes, avgLoc, avgBinaryBytes, weightText, weightBinary)
 
 	switch format {
 	case "text":
-		outputText(gitClient, deltaLines, deltaBinaryBytes, avgLoc, avgBinaryBytes, divergence, lambda, branch1, branch2, preset, sensitivity, format, noColor)
+		outputText(gitClient, deltaLines, deltaBinaryBytes, avgLoc, avgBinaryBytes, divergenceText, divergenceBinary, divergence, lambda, branch1, branch2, preset, sensitivity, format, noColor, detailed)
 	case "json":
 		outputJSON(deltaLines, deltaBinaryBytes, avgLoc, avgBinaryBytes, divergence, lambda, weightText, weightBinary, branch1, branch2, preset, sensitivity)
 	case "custom":
@@ -213,7 +215,7 @@ func formatBytes(b int64) string {
 	}
 }
 
-func outputText(gitClient *bifurc.GitClient, deltaLines int, deltaBinaryBytes int64, avgLoc int, avgBinaryBytes int64, divergence, lambda float64, branch1, branch2, preset, sensitivity, format string, noColor bool) {
+func outputText(gitClient *bifurc.GitClient, deltaLines int, deltaBinaryBytes int64, avgLoc int, avgBinaryBytes int64, divergenceText, divergenceBinary, divergence, lambda float64, branch1, branch2, preset, sensitivity, format string, noColor bool, detailed bool) {
 	if format == "text" && !noColor {
 		if repoInfo, err := gitClient.GetRepoInfo(); err == nil {
 			fmt.Printf("Repository: %s", color.CyanString(repoInfo))
@@ -243,6 +245,19 @@ func outputText(gitClient *bifurc.GitClient, deltaLines int, deltaBinaryBytes in
 	}
 	fmt.Println()
 	fmt.Printf("  Raw score D:        %s\n", color.CyanString("%.4f", divergence))
+	if detailed {
+		if divergence > 0 {
+			fmt.Printf("    Text component:   %s  (%s of D)\n",
+				color.CyanString("%.4f", divergenceText),
+				color.YellowString("%.0f%%", divergenceText/divergence*100))
+			fmt.Printf("    Binary component: %s  (%s of D)\n",
+				color.CyanString("%.4f", divergenceBinary),
+				color.YellowString("%.0f%%", divergenceBinary/divergence*100))
+		} else {
+			fmt.Printf("    Text component:   %s\n", color.CyanString("%.4f", divergenceText))
+			fmt.Printf("    Binary component: %s\n", color.CyanString("%.4f", divergenceBinary))
+		}
+	}
 	fmt.Printf("  Divergence:          %s\n", color.GreenString("%.2f%%", divergence*100))
 	fmt.Printf("  Divergence Impact:   %s\n", color.GreenString("%.1f%%", divergenceImpact(divergence, lambda)))
 }
