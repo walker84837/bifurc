@@ -211,7 +211,7 @@ Text output shows two metrics:
 | Metric | What it is |
 |---|---|
 | **Divergence** | `D × 100` -- the linear, objective measure of change as a percentage of the average codebase size |
-| **Divergence Impact** | `100 × (1 − e^(−λᴰ))` -- a display-oriented exponential curve that compresses large values |
+| **Divergence Impact** | `100 × (1 − e^(−λD))` -- a display-oriented exponential curve that compresses large values |
 
 **Divergence** is the precise metric: it tells you what fraction of the codebase changed. **Divergence Impact** is a presentational transform that gives a more intuitive feel, especially for small changes, but should not be treated as a high-precision number.
 
