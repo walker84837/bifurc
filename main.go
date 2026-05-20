@@ -15,6 +15,27 @@ import (
 	"github.com/fatih/color"
 )
 
+type Stats struct {
+	DeltaLines       int
+	DeltaBinaryBytes int64
+	AvgLoc           int
+	AvgBinaryBytes   int64
+	DivergenceText   float64
+	DivergenceBinary float64
+	Divergence       float64
+	Lambda           float64
+	WeightText       float64
+	WeightBinary     float64
+	Branch1          string
+	Branch2          string
+	Preset           string
+	Sensitivity      string
+	Format           string
+	Separator        string
+	NoColor          bool
+	Detailed         bool
+}
+
 var (
 	branch1      string
 	branch2      string
@@ -150,13 +171,34 @@ func main() {
 	lambda := resolveLambda(lambdaFlag, sensitivity, avgLoc)
 	divergenceText, divergenceBinary, divergence := calculateDivergence(deltaLines, deltaBinaryBytes, avgLoc, avgBinaryBytes, weightText, weightBinary)
 
+	st := &Stats{
+		DeltaLines:       deltaLines,
+		DeltaBinaryBytes: deltaBinaryBytes,
+		AvgLoc:           avgLoc,
+		AvgBinaryBytes:   avgBinaryBytes,
+		DivergenceText:   divergenceText,
+		DivergenceBinary: divergenceBinary,
+		Divergence:       divergence,
+		Lambda:           lambda,
+		WeightText:       weightText,
+		WeightBinary:     weightBinary,
+		Branch1:          branch1,
+		Branch2:          branch2,
+		Preset:           preset,
+		Sensitivity:      sensitivity,
+		Format:           format,
+		Separator:        separator,
+		NoColor:          noColor,
+		Detailed:         detailed,
+	}
+
 	switch format {
 	case "text":
-		outputText(gitClient, deltaLines, deltaBinaryBytes, avgLoc, avgBinaryBytes, divergenceText, divergenceBinary, divergence, lambda, branch1, branch2, preset, sensitivity, format, noColor, detailed)
+		outputText(gitClient, st)
 	case "json":
-		outputJSON(deltaLines, deltaBinaryBytes, avgLoc, avgBinaryBytes, divergence, lambda, weightText, weightBinary, branch1, branch2, preset, sensitivity)
+		outputJSON(st)
 	case "custom":
-		outputCustom(deltaLines, deltaBinaryBytes, avgLoc, avgBinaryBytes, divergence, lambda, weightText, weightBinary, branch1, branch2, preset, sensitivity, separator)
+		outputCustom(st)
 	default:
 		outputError("Invalid output format specified", format)
 	}
@@ -215,54 +257,54 @@ func formatBytes(b int64) string {
 	}
 }
 
-func outputText(gitClient *bifurc.GitClient, deltaLines int, deltaBinaryBytes int64, avgLoc int, avgBinaryBytes int64, divergenceText, divergenceBinary, divergence, lambda float64, branch1, branch2, preset, sensitivity, format string, noColor bool, detailed bool) {
-	if format == "text" && !noColor {
+func outputText(gitClient *bifurc.GitClient, st *Stats) {
+	if st.Format == "text" && !st.NoColor {
 		if repoInfo, err := gitClient.GetRepoInfo(); err == nil {
 			fmt.Printf("Repository: %s", color.CyanString(repoInfo))
-			if preset != "custom" {
-				fmt.Printf(" (%s preset)", preset)
+			if st.Preset != "custom" {
+				fmt.Printf(" (%s preset)", st.Preset)
 			}
-			fmt.Printf(" (λ=%.2f, sensitivity=%s)\n", lambda, sensitivity)
+			fmt.Printf(" (λ=%.2f, sensitivity=%s)\n", st.Lambda, st.Sensitivity)
 			fmt.Println()
 		}
 	}
 
-	if divergence < 0.001 && deltaLines == 0 && deltaBinaryBytes == 0 {
-		color.Green("No changes between '%s' and '%s'.", branch1, branch2)
+	if st.Divergence < 0.001 && st.DeltaLines == 0 && st.DeltaBinaryBytes == 0 {
+		color.Green("No changes between '%s' and '%s'.", st.Branch1, st.Branch2)
 		return
 	}
 
-	fmt.Printf("  Total LOC:          %s\n", color.CyanString("%d", avgLoc))
-	fmt.Printf("  Total binary:       %s\n", color.CyanString(formatBytes(avgBinaryBytes)))
-	fmt.Printf("  Lines changed:      %s", color.YellowString("%d", deltaLines))
-	if avgLoc > 0 {
-		fmt.Printf("  (%s of LOC)", color.YellowString("%.1f%%", float64(deltaLines)/float64(avgLoc)*100))
+	fmt.Printf("  Total LOC:          %s\n", color.CyanString("%d", st.AvgLoc))
+	fmt.Printf("  Total binary:       %s\n", color.CyanString(formatBytes(st.AvgBinaryBytes)))
+	fmt.Printf("  Lines changed:      %s", color.YellowString("%d", st.DeltaLines))
+	if st.AvgLoc > 0 {
+		fmt.Printf("  (%s of LOC)", color.YellowString("%.1f%%", float64(st.DeltaLines)/float64(st.AvgLoc)*100))
 	}
 	fmt.Println()
-	fmt.Printf("  Binary changed:     %s", color.YellowString(formatBytes(deltaBinaryBytes)))
-	if avgBinaryBytes > 0 {
-		fmt.Printf("  (%s of binaries)", color.YellowString("%.1f%%", float64(deltaBinaryBytes)/float64(avgBinaryBytes)*100))
+	fmt.Printf("  Binary changed:     %s", color.YellowString(formatBytes(st.DeltaBinaryBytes)))
+	if st.AvgBinaryBytes > 0 {
+		fmt.Printf("  (%s of binaries)", color.YellowString("%.1f%%", float64(st.DeltaBinaryBytes)/float64(st.AvgBinaryBytes)*100))
 	}
 	fmt.Println()
-	fmt.Printf("  Raw score D:        %s\n", color.CyanString("%.4f", divergence))
-	if detailed {
-		if divergence > 0 {
+	fmt.Printf("  Raw score D:        %s\n", color.CyanString("%.4f", st.Divergence))
+	if st.Detailed {
+		if st.Divergence > 0 {
 			fmt.Printf("    Text component:   %s  (%s of D)\n",
-				color.CyanString("%.4f", divergenceText),
-				color.YellowString("%.0f%%", divergenceText/divergence*100))
+				color.CyanString("%.4f", st.DivergenceText),
+				color.YellowString("%.0f%%", st.DivergenceText/st.Divergence*100))
 			fmt.Printf("    Binary component: %s  (%s of D)\n",
-				color.CyanString("%.4f", divergenceBinary),
-				color.YellowString("%.0f%%", divergenceBinary/divergence*100))
+				color.CyanString("%.4f", st.DivergenceBinary),
+				color.YellowString("%.0f%%", st.DivergenceBinary/st.Divergence*100))
 		} else {
-			fmt.Printf("    Text component:   %s\n", color.CyanString("%.4f", divergenceText))
-			fmt.Printf("    Binary component: %s\n", color.CyanString("%.4f", divergenceBinary))
+			fmt.Printf("    Text component:   %s\n", color.CyanString("%.4f", st.DivergenceText))
+			fmt.Printf("    Binary component: %s\n", color.CyanString("%.4f", st.DivergenceBinary))
 		}
 	}
-	fmt.Printf("  Divergence:          %s\n", color.GreenString("%.2f%%", divergence*100))
-	fmt.Printf("  Divergence Impact:   %s\n", color.GreenString("%.1f%%", divergenceImpact(divergence, lambda)))
+	fmt.Printf("  Divergence:          %s\n", color.GreenString("%.2f%%", st.Divergence*100))
+	fmt.Printf("  Divergence Impact:   %s\n", color.GreenString("%.1f%%", divergenceImpact(st.Divergence, st.Lambda)))
 }
 
-func outputJSON(deltaLines int, deltaBinaryBytes int64, avgLoc int, avgBinaryBytes int64, divergence, lambda, weightText, weightBinary float64, branch1, branch2, preset, sensitivity string) {
+func outputJSON(st *Stats) {
 	out := struct {
 		TotalLoc         int     `json:"totalLoc"`
 		TotalBinaryBytes int64   `json:"totalBinaryBytes"`
@@ -277,43 +319,43 @@ func outputJSON(deltaLines int, deltaBinaryBytes int64, avgLoc int, avgBinaryByt
 		Branch1          string  `json:"branch1"`
 		Branch2          string  `json:"branch2"`
 	}{
-		TotalLoc:         avgLoc,
-		TotalBinaryBytes: avgBinaryBytes,
-		DeltaLines:       deltaLines,
-		DeltaBinaryBytes: deltaBinaryBytes,
-		RawScore:         math.Round(divergence*10000) / 10000,
-		Lambda:           math.Round(lambda*100) / 100,
-		Sensitivity:      sensitivity,
-		Preset:           preset,
-		TextWeight:       weightText,
-		BinaryWeight:     weightBinary,
-		Branch1:          branch1,
-		Branch2:          branch2,
+		TotalLoc:         st.AvgLoc,
+		TotalBinaryBytes: st.AvgBinaryBytes,
+		DeltaLines:       st.DeltaLines,
+		DeltaBinaryBytes: st.DeltaBinaryBytes,
+		RawScore:         math.Round(st.Divergence*10000) / 10000,
+		Lambda:           math.Round(st.Lambda*100) / 100,
+		Sensitivity:      st.Sensitivity,
+		Preset:           st.Preset,
+		TextWeight:       st.WeightText,
+		BinaryWeight:     st.WeightBinary,
+		Branch1:          st.Branch1,
+		Branch2:          st.Branch2,
 	}
 	jsonData, err := json.Marshal(out)
 	if err != nil {
-		outputError(fmt.Sprintf("Error generating JSON: %v", err), format)
+		outputError(fmt.Sprintf("Error generating JSON: %v", err), st.Format)
 	}
 	fmt.Println(string(jsonData))
 }
 
-func outputCustom(deltaLines int, deltaBinaryBytes int64, avgLoc int, avgBinaryBytes int64, divergence, lambda, weightText, weightBinary float64, branch1, branch2, preset, sensitivity, separator string) {
+func outputCustom(st *Stats) {
 	parts := []string{
-		strconv.FormatFloat(divergence*100, 'f', 2, 64),
-		strconv.FormatFloat(divergence, 'f', 4, 64),
-		strconv.Itoa(deltaLines),
-		strconv.FormatInt(deltaBinaryBytes, 10),
-		strconv.Itoa(avgLoc),
-		strconv.FormatInt(avgBinaryBytes, 10),
-		strconv.FormatFloat(lambda, 'f', 2, 64),
-		strconv.FormatFloat(weightText, 'f', 2, 64),
-		strconv.FormatFloat(weightBinary, 'f', 2, 64),
-		preset,
-		sensitivity,
-		branch1,
-		branch2,
+		strconv.FormatFloat(st.Divergence*100, 'f', 2, 64),
+		strconv.FormatFloat(st.Divergence, 'f', 4, 64),
+		strconv.Itoa(st.DeltaLines),
+		strconv.FormatInt(st.DeltaBinaryBytes, 10),
+		strconv.Itoa(st.AvgLoc),
+		strconv.FormatInt(st.AvgBinaryBytes, 10),
+		strconv.FormatFloat(st.Lambda, 'f', 2, 64),
+		strconv.FormatFloat(st.WeightText, 'f', 2, 64),
+		strconv.FormatFloat(st.WeightBinary, 'f', 2, 64),
+		st.Preset,
+		st.Sensitivity,
+		st.Branch1,
+		st.Branch2,
 	}
-	fmt.Println(strings.Join(parts, separator))
+	fmt.Println(strings.Join(parts, st.Separator))
 }
 
 // outputError outputs an error message based on the configured format and exits the program with code 1.
